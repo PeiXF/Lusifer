@@ -18,20 +18,19 @@ from Lusifer import Lusifer
 
 
 # path to the folder containing movielens data
-Path = "D:/Canada/Danial/UoW/Dataset/MovieLens/research_baseline/Movielens1m/ml-1m"
+Path = "/content/Lusifer/Samples/Data/1m"
 
 
 # Use your actual API key securely
 KEY = os.getenv('OPENAI_API_KEY')
-
 
 # --------------------------------------------------------------
 def load_data():
     # Paths for the processed files
 
 
-    processed_users_file = "./Samples/Data/1m/users_with_summary_df.csv"
-    processed_ratings_file = "./Samples/Data/1m/rating_test_df_test.csv"
+    processed_users_file = f"{Path}/users_with_summary_df.csv"
+    processed_ratings_file = f"{Path}/rating_test_df_test.csv"
 
     # loading users dataframe
     if os.path.exists(processed_users_file):
@@ -40,7 +39,7 @@ def load_data():
         # users_df = pd.read_pickle(processed_users_file)
 
     else:
-        users_df = pd.read_pickle("Samples/Data/1m/user_dataset.pkl")
+        users_df = pd.read_pickle(f"{Path}/user_dataset.pkl")
         users_df = users_df[["user_id", "user_info"]]
 
     # loading ratings dataframe
@@ -56,7 +55,7 @@ def load_data():
                             encoding='latin-1')
 
     # Load movies
-    movies_df = pd.read_pickle("Samples/Data/1m/movies_enriched_dataset.pkl")
+    movies_df = pd.read_pickle(f"{Path}/movies_enriched_dataset.pkl")
     movies_df = movies_df[["movie_id", "movie_info"]]
 
     # Add new column to store simulated ratings if it doesn't exist

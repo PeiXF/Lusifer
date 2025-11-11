@@ -3,12 +3,14 @@ import time
 
 import torch
 import ollama
+from openai import OpenAI
 
 class LocalLM:
 
     def __init__(self, model):
         # Initialize the Ollama client
-        self.client = ollama.Client()
+        # self.client = ollama.Client()
+        self.client = OpenAI()
         self.model = model
 
     # def get_llm_response(self, prompt):
@@ -38,7 +40,18 @@ class LocalLM:
         for attempt in range(max_retries):
             try:
                 # Try generating the response
-                response = self.client.generate(model=self.model, prompt=prompt)
+                # response = self.client.generate(model=self.model, prompt=prompt)
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that replies in JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                    max_tokens=700,
+                    n=1
+                )
             except Exception as e:
                 # This catches errors like the connection being forcibly closed
                 print(f"Error on attempt {attempt + 1}: {e}.")

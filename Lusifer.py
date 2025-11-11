@@ -48,7 +48,8 @@ class Lusifer:
 
         # saving path
         self.saving_path = ""
-        self.llm = LocalLM(model="gemma3:4b")
+        # self.llm = LocalLM(model="gemma3:4b")
+        self.llm = LocalLM(model="gpt-3.5-turbo-16k")
 
     # --------------------------------------------------------------
     def set_openai_connection(self, api_key, model):
@@ -686,8 +687,10 @@ class Lusifer:
 
         # Get LLM response
         # llm_response, tokens = self.get_llm_response(prompt, mode="rating")
-        llm = LocalLM(model="gemma3:12b")
-        llm_response, tokens = llm.get_llm_response(prompt, mode="rating")
+        # llm = LocalLM(model="gemma3:12b")
+        llm = LocalLM(model="gpt-3.5-turbo-16k")
+        # llm_response, tokens = llm.get_llm_response(prompt, mode="rating")
+        llm_response, tokens = self.get_llm_response(prompt, mode="rating")
 
         # Parse the LLM output
         cleaned_ratings = self.parse_llm_ratings(llm_response)
