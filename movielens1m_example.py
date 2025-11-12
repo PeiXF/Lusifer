@@ -1,5 +1,6 @@
 import openai
 from openai import OpenAI
+import google.generativeai as genai
 import pandas as pd
 import json
 from sklearn.metrics import root_mean_squared_error, precision_score, recall_score, accuracy_score
@@ -18,11 +19,11 @@ from Lusifer import Lusifer
 
 
 # path to the folder containing movielens data
-Path = "/content/Lusifer/Samples/Data/1m"
+Path = "/content/Lusifer/Samples/Data/100k"
 
 
 # Use your actual API key securely
-KEY = os.getenv('OPENAI_API_KEY')
+KEY = os.getenv('GOOGLE_API_KEY')
 
 # --------------------------------------------------------------
 def load_data():
@@ -30,7 +31,7 @@ def load_data():
 
 
     processed_users_file = f"{Path}/users_with_summary_df.csv"
-    processed_ratings_file = f"{Path}/rating_test_df_test.csv"
+    processed_ratings_file = f"{Path}/rating_test_df_100k.csv"
 
     # loading users dataframe
     if os.path.exists(processed_users_file):

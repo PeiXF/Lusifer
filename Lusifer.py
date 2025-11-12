@@ -1,12 +1,13 @@
-
+import google.generativeai as genai
 import openai
 from openai import OpenAI
 import json
 import re
+import os
 import time
 import pandas as pd
 import logging
-from local_llm.LocalLM import LocalLM
+# from local_llm.LocalLM import LocalLM
 
 
 class Lusifer:
@@ -49,7 +50,7 @@ class Lusifer:
         # saving path
         self.saving_path = ""
         # self.llm = LocalLM(model="gemma3:4b")
-        self.llm = LocalLM(model="gpt-3.5-turbo-16k")
+        self.llm = genai.GenerativeModel("models/gemini-2.5-flash-lite")
 
     # --------------------------------------------------------------
     def set_openai_connection(self, api_key, model):
@@ -455,7 +456,8 @@ class Lusifer:
         for chunk in test_item_chunks:
             prompt = self.rate_new_items_prompt(user_profile, recent_items, chunk)
             # response, tokens = self.get_llm_response(prompt, mode="rating")
-            llm_response, tokens = self.llm.get_llm_response(prompt, mode="rating")
+            # llm_response, tokens = self.llm.get_llm_response(prompt, mode="rating")
+            llm_response, tokens = self.get_llm_response(prompt, mode="rating")
 
             # Parse the LLM output
             cleaned_ratings = self.parse_llm_ratings(llm_response)
@@ -472,34 +474,41 @@ class Lusifer:
         sending the prompt to the LLM and get back the response
         """
 
-        openai.api_key = self.api_key
         instructions = self.instructions
+        model = genai.GenerativeModel("models/gemini-2.5-flash-lite")
 
-        client = OpenAI(api_key=self.api_key)
+        genai.configure(api_key=self.api_key)
 
         for attempt in range(max_retries):
             try:
-                response = client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": instructions},
-                        {"role": "user", "content": prompt}
+                response = model.generate_content(
+                    [
+                        {"role": "user", "parts": [
+                            f"{instructions}\n\n{prompt}"
+                        ]}
                     ],
-                    response_format={"type": "json_object"},
-                    max_tokens=700,
-                    n=1,
-                    temperature=0.7
+                    generation_config={
+                        "temperature": 0.7,
+                        "max_output_tokens": 1000,
+                        "response_mime_type": "application/json"
+                    }
                 )
 
                 tokens = {
-                    'prompt_tokens': response.usage.prompt_tokens,
-                    'completion_tokens': response.usage.completion_tokens,
-                    'total_tokens': response.usage.total_tokens
+                    'prompt_tokens': response.usage_metadata.prompt_token_count,
+                    'completion_tokens': response.usage_metadata.candidates_token_count,
+                    'total_tokens': response.usage_metadata.total_token_count
                 }
+                #tokens = {
+                #    'prompt_tokens': 0,
+                #    'completion_tokens': 0,
+                #    'total_tokens': 0
+                #}
 
 
                 try:
-                    output = json.loads(response.choices[0].message.content)
+                    # print(response)
+                    output = json.loads(response.candidates[0].content.parts[0].text)
 
                     if mode == "user_profile":
                         if 'user_profile' not in output:
@@ -688,9 +697,8 @@ class Lusifer:
         # Get LLM response
         # llm_response, tokens = self.get_llm_response(prompt, mode="rating")
         # llm = LocalLM(model="gemma3:12b")
-        llm = LocalLM(model="gpt-3.5-turbo-16k")
-        # llm_response, tokens = llm.get_llm_response(prompt, mode="rating")
-        llm_response, tokens = self.get_llm_response(prompt, mode="rating")
+        llm = genai.GenerativeModel("models/gemini-2.5-flash-lite")
+        llm_response, tokens = llm.get_llm_response(prompt, mode="rating")
 
         # Parse the LLM output
         cleaned_ratings = self.parse_llm_ratings(llm_response)
