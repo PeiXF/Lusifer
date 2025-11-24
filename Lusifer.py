@@ -49,11 +49,9 @@ class Lusifer:
 
         # saving path
         self.saving_path = ""
-        # self.llm = LocalLM(model="gemma3:4b")
-        self.llm = genai.GenerativeModel("models/gemini-2.5-flash-lite")
 
     # --------------------------------------------------------------
-    def set_openai_connection(self, api_key, model):
+    def set_connection(self, api_key, model):
         """
         Setting openai connection
         :param api_key: openai Key
@@ -455,8 +453,7 @@ class Lusifer:
 
         for chunk in test_item_chunks:
             prompt = self.rate_new_items_prompt(user_profile, recent_items, chunk)
-            # response, tokens = self.get_llm_response(prompt, mode="rating")
-            # llm_response, tokens = self.llm.get_llm_response(prompt, mode="rating")
+
             llm_response, tokens = self.get_llm_response(prompt, mode="rating")
 
             # Parse the LLM output
@@ -475,7 +472,7 @@ class Lusifer:
         """
 
         instructions = self.instructions
-        model = genai.GenerativeModel("models/gemini-2.5-flash-lite")
+        model = self.model
 
         genai.configure(api_key=self.api_key)
 
@@ -695,10 +692,7 @@ class Lusifer:
         prompt = self.rate_new_items_prompt(user_profile, last_n_items, test_set)
 
         # Get LLM response
-        # llm_response, tokens = self.get_llm_response(prompt, mode="rating")
-        # llm = LocalLM(model="gemma3:12b")
-        llm = genai.GenerativeModel("models/gemini-2.5-flash-lite")
-        llm_response, tokens = llm.get_llm_response(prompt, mode="rating")
+        llm_response, tokens = self.model.get_llm_response(prompt, mode="rating")
 
         # Parse the LLM output
         cleaned_ratings = self.parse_llm_ratings(llm_response)

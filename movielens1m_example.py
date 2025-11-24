@@ -23,7 +23,13 @@ Path = "/content/Lusifer/Samples/Data/100k"
 
 
 # Use your actual API key securely
-KEY = os.getenv('GOOGLE_API_KEY')
+api_key = os.getenv('GOOGLE_API_KEY')
+
+# model = "gpt-4o-mini-2024-07-18"
+# model = "gpt-4o-mini"
+# model = LocalLM(model="gemma3:12b")
+# model = LocalLM(model="gemma3:4b")
+model = genai.GenerativeModel("models/gemini-2.5-flash-lite")
 
 # --------------------------------------------------------------
 def load_data():
@@ -173,9 +179,7 @@ if __name__ == "__main__":
                       ratings_df=rating_df)
 
     # set API connection
-    # model = "gpt-4o-mini-2024-07-18"
-    model = "gpt-4o-mini"
-    lusifer.set_openai_connection(KEY, model=model)
+    lusifer.set_connection(api_key=api_key, model=model)
 
     # set column names
     lusifer.set_column_names(user_feature="user_info",
