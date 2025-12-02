@@ -16,7 +16,7 @@ load_dotenv()
 
 # import Lusifer
 from Lusifer import Lusifer
-from sasrec_adapter import DummySASRecRecommender, score_candidates_with_sasrec
+from sasrec_adapter import build_sasrec_model_or_dummy, score_candidates_with_sasrec
 
 
 # path to the folder containing movielens data
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     rating_test_df['simulated_ratings'] = None
     sasrec_model = None
     if USE_SASREC:
-        sasrec_model = DummySASRecRecommender(rating_df=rating_df)
+        sasrec_model = build_sasrec_model_or_dummy(rating_df=rating_df)
 
     for user_id in tqdm(user_ids, desc="Generating simulated ratings"):
         # isolating user's ratings in the test set
