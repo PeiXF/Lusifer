@@ -16,14 +16,19 @@ load_dotenv()
 
 # import Lusifer
 from Lusifer import Lusifer
+from sasrec_adapter import DummySASRecRecommender, score_candidates_with_sasrec
 
 
 # path to the folder containing movielens data
-Path = "/content/Lusifer/Samples/Data/100k"
+Path = "/Users/xianfeng_pei/Desktop/ZDF/demo-Lusifer/Lusifer/Samples/Data/100k"
 
 
 # Use your actual API key securely
 api_key = os.getenv('GOOGLE_API_KEY')
+
+# Whether to use SASRec as the recommender algorithm (instead of LLM)
+# USE_SASREC = os.getenv("USE_SASREC", "false").lower() == "true"
+USE_SASREC = True
 
 # model = "gpt-4o-mini-2024-07-18"
 # model = "gpt-4o-mini"
@@ -230,6 +235,11 @@ if __name__ == "__main__":
             lusifer.save_data(users_df, 'users_with_summary_df')
 
     ## PHASE 2: Generating Simulated ratings
+    rating_test_df['simulated_ratings'] = None
+    sasrec_model = None
+    if USE_SASREC:
+        sasrec_model = DummySASRecRecommender(rating_df=rating_df)
+
     for user_id in tqdm(user_ids, desc="Generating simulated ratings"):
         # isolating user's ratings in the test set
         user_ratings = rating_test_df[rating_test_df['user_id'] == user_id]
@@ -244,11 +254,23 @@ if __name__ == "__main__":
         if not missing_ratings.empty:
             last_N_movies = lusifer.get_last_ratings(user_id, n=10)
 
-            # generate rating
-            llm_ratings = lusifer.rate_new_items(user_profile, last_N_movies, missing_ratings)
+            if USE_SASREC and sasrec_model is not None:
+                # Use SASRec to score candidates
+                sasrec_ratings = score_candidates_with_sasrec(
+                    sasrec_model,
+                    user_id=user_id,
+                    rating_df=rating_df,
+                    candidates=missing_ratings["movie_id"].tolist(),
+                    history_size=10,
+                )
+                new_ratings = sasrec_ratings
+            else:
+                # Still use LLM (original Lusifer behavior)
+                print("\nUsing LLM to score candidates\n")
+                new_ratings = lusifer.rate_new_items(user_profile, last_N_movies, missing_ratings)
 
             # Assigning the ratings to the movies
-            for movie_id, rating in llm_ratings.items():
+            for movie_id, rating in new_ratings.items():
                 rating_test_df.loc[(rating_test_df['user_id'] == user_id) & (
                         rating_test_df['movie_id'] == movie_id), 'simulated_ratings'] = rating
 
