@@ -12,34 +12,148 @@ Local training SASRec model simplified script (based on MovieLens data)
 """
 import argparse
 import logging
+import os
 import pickle
 import sys
 from pathlib import Path
 from typing import Dict
 
+# Set environment variables BEFORE importing TensorFlow to avoid mutex issues
+# These must be set before ANY TensorFlow-related imports
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress WARNING messages too
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN optimizations that can cause mutex issues
+os.environ['TF_DISABLE_MKL'] = '1'  # Disable MKL
+os.environ['OMP_NUM_THREADS'] = '1'  # Limit OpenMP threads (critical for multiprocessing)
+os.environ['MKL_NUM_THREADS'] = '1'  # Limit MKL threads
+os.environ['NUMEXPR_NUM_THREADS'] = '1'  # Limit NumExpr threads
+os.environ['OPENBLAS_NUM_THREADS'] = '1'  # Limit OpenBLAS threads
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'  # Limit macOS Accelerate framework threads
+os.environ['NUMBA_NUM_THREADS'] = '1'  # Limit Numba threads
+
+# Disable multiprocessing completely to avoid any subprocess issues
+# Set multiprocessing start method to 'spawn' to avoid fork-related issues
+# This must be done before importing multiprocessing
+import multiprocessing
+try:
+    multiprocessing.set_start_method('spawn', force=True)
+except RuntimeError:
+    # Already set, ignore
+    pass
+
+# Prevent multiprocessing from being used
+multiprocessing.freeze_support()
+
 import numpy as np
 import pandas as pd
+
+# Initialize logging BEFORE TensorFlow to avoid log-related mutex issues
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Now import TensorFlow with all protections in place
 import tensorflow as tf
 
 # Configure TensorFlow to use single thread (to avoid mutex issues)
+# This must be done IMMEDIATELY after importing TensorFlow
+try:
+    # Disable all GPUs first
+    tf.config.set_visible_devices([], 'GPU')
+except:
+    pass
+
+# Set thread configuration
 tf.config.threading.set_inter_op_parallelism_threads(1)
 tf.config.threading.set_intra_op_parallelism_threads(1)
 
+# Disable TensorFlow optimizations that might use multiple threads
+tf.config.optimizer.set_jit(False)  # Disable XLA JIT compilation
+
 # Set TensorFlow log level
-tf.get_logger().setLevel("INFO")
+tf.get_logger().setLevel("ERROR")  # Only show errors
+
+logging.info("TensorFlow configured: single thread, GPU disabled")
 
 # Need to set PYTHONPATH first to import these modules
+# Import with additional protection to avoid mutex issues during import
+logging.info("Importing SASRec modules...")
 try:
-    from sasrec_model import CustomSASRec
-    from sasrec_data import CustomSASRecDataSet
-    from recommenders.models.sasrec.sampler import WarpSampler
+    # Suppress any TensorFlow warnings during import
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        from sasrec_model import CustomSASRec
+        from sasrec_data import CustomSASRecDataSet
+    logging.info("SASRec modules imported successfully")
 except ImportError as e:
     print(f"Import error: {e}")
     print("Please set PYTHONPATH first:")
     print("export PYTHONPATH=/Users/xianfeng_pei/Desktop/ZDF/recommendations-models-sasrec/docker/code:$PYTHONPATH")
     sys.exit(1)
+except Exception as e:
+    logging.error(f"Unexpected error during import: {e}")
+    print(f"Error: {e}")
+    print("This might be a mutex issue. Try running with:")
+    print("export OMP_NUM_THREADS=1")
+    print("export MKL_NUM_THREADS=1")
+    sys.exit(1)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class SimpleSampler:
+    """
+    Single-process sampler to avoid multiprocessing mutex issues with TensorFlow.
+    This is a drop-in replacement for WarpSampler that doesn't use multiprocessing.
+    """
+    def __init__(self, user_train, usernum, itemnum, batch_size=64, maxlen=10, n_workers=1):
+        self.user_train = user_train
+        self.usernum = usernum
+        self.itemnum = itemnum
+        self.batch_size = batch_size
+        self.maxlen = maxlen
+        np.random.seed(np.random.randint(2e9))
+        logging.info("Using SimpleSampler (single-process, no multiprocessing)")
+    
+    def random_neq(self, left, right, s):
+        """Sample a random number not in set s"""
+        t = np.random.randint(left, right)
+        while t in s:
+            t = np.random.randint(left, right)
+        return t
+    
+    def sample(self):
+        """Sample a single training example"""
+        user = np.random.randint(1, self.usernum + 1)
+        while len(self.user_train[user]) <= 1:
+            user = np.random.randint(1, self.usernum + 1)
+        
+        seq = np.zeros([self.maxlen], dtype=np.int32)
+        pos = np.zeros([self.maxlen], dtype=np.int32)
+        neg = np.zeros([self.maxlen], dtype=np.int32)
+        nxt = self.user_train[user][-1]
+        idx = self.maxlen - 1
+        
+        ts = set(self.user_train[user])
+        for i in reversed(self.user_train[user][:-1]):
+            seq[idx] = i
+            pos[idx] = nxt
+            if nxt != 0:
+                neg[idx] = self.random_neq(1, self.itemnum + 1, ts)
+            nxt = i
+            idx -= 1
+            if idx == -1:
+                break
+        
+        return (user, seq, pos, neg)
+    
+    def next_batch(self):
+        """Generate next batch of samples"""
+        one_batch = []
+        for i in range(self.batch_size):
+            one_batch.append(self.sample())
+        return zip(*one_batch)
+    
+    def close(self):
+        """No-op for compatibility with WarpSampler interface"""
+        pass
 
 
 def prepare_movielens_data(rating_df: pd.DataFrame) -> tuple:
@@ -111,13 +225,14 @@ def train_sasrec(
     dataset.itemnum = num_items
     
     # Create sampler
-    sampler = WarpSampler(
+    # Use SimpleSampler instead of WarpSampler to avoid multiprocessing mutex issues
+    sampler = SimpleSampler(
         user_data,
         num_users,
         num_items,
         batch_size=hyperparams['batch_size'],
         maxlen=hyperparams['maxlen'],
-        n_workers=2,
+        n_workers=1,  # Not used, but kept for compatibility
     )
     
     # Create model
@@ -170,6 +285,13 @@ def train_sasrec(
         
         avg_loss = np.mean(epoch_loss)
         logging.info(f"Epoch {epoch} completed, average Loss: {avg_loss:.4f}")
+    
+    # Close sampler to clean up multiprocessing resources
+    try:
+        sampler.close()
+        logging.info("Sampler closed successfully")
+    except Exception as e:
+        logging.warning(f"Error closing sampler: {e}")
     
     # Save model
     Path(output_dir).mkdir(parents=True, exist_ok=True)
